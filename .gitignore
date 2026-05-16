@@ -1,0 +1,7 @@
+.venv/
+config/config.json
+state.json
+bridge.log
+__pycache__/
+*.pyc
+*.zip

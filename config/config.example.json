@@ -1,0 +1,14 @@
+{
+    "telegram": {
+        "bot_token": "YOUR_BOT_TOKEN_HERE",
+        "allowed_user_ids": [],
+        "allowed_chat_ids": null
+    },
+    "deepseek": {
+        "binary": "deepseek-tui",
+        "working_dir": null,
+        "model": null,
+        "approval_mode": "yolo",
+        "timeout_ms": 600000
+    }
+}
