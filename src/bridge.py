@@ -495,7 +495,7 @@ async def main() -> None:
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, lambda: asyncio.create_task(_shutdown()))
 
-    async with httpx.AsyncClient(http2=True) as client:
+    async with httpx.AsyncClient(http2=True, timeout=httpx.Timeout(60.0)) as client:
         try:
             await poll_loop(client, cfg, state)
         except asyncio.CancelledError:
