@@ -5,3 +5,4 @@ bridge.log
 __pycache__/
 *.pyc
 *.zip
+watchdog.log
