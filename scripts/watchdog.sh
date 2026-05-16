@@ -5,7 +5,6 @@ set -euo pipefail
 
 PROJECT_DIR="$HOME/projects/deepseek-telegram-bridge"
 LOG_FILE="$PROJECT_DIR/watchdog.log"
-BRIDGE_LOG="$PROJECT_DIR/bridge.log"
 VENV_PYTHON="$PROJECT_DIR/.venv/bin/python"
 
 log() {
@@ -33,7 +32,7 @@ fi
 
 # Start bridge in background, detached from cron
 cd "$PROJECT_DIR"
-nohup "$VENV_PYTHON" -m src.bridge >> "$BRIDGE_LOG" 2>&1 &
+nohup "$VENV_PYTHON" -m src.bridge > /dev/null 2>&1 &
 BRIDGE_PID=$!
 
 log "Bridge started with PID=$BRIDGE_PID"
