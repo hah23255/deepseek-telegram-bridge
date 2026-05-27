@@ -1,0 +1,17 @@
+# Memory Index
+
+## Engineering Doctrine
+- [QA Doctrine — Master Tester + composers](feedback-master-tester.md) — adopted YYYY-MM-DD; strategic frame + tactical stack (security-review, pr-review-toolkit, feature-dev, TDD, systematic-debugging, verification, code-review loop)
+
+## Active Project: <project-slug>
+- [<project-slug> state pointer](<project-slug>.md) — handles + outstanding tasks; full handoff doc lives at <path-to-handoff>
+
+## Security
+<!-- Add incident pointers as encountered, e.g.:
+- [Incident Recovery INC-YYYYMMDD-001](incident-recovery-YYYYMMDD.md) — short description
+-->
+
+## Other Systems / Tools
+<!-- Add reference memory pointers for ops, plugins, integrations, e.g.:
+- [Ops runbook](ops-runbook.md) — services, ports, cron jobs
+-->

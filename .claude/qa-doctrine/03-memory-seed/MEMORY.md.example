@@ -1,0 +1,51 @@
+# Memory Index
+
+## Engineering Doctrine
+- [QA Doctrine — Master Tester + composers](feedback-master-tester.md) — adopted 2026-05-09, extended 2026-05-10; strategic frame + tactical stack (security-review, pr-review-toolkit, feature-dev, TDD, systematic-debugging, verification, code-review loop)
+- [claude-to-im liveness gap](feedback-claude-to-im-liveness.md) — doctor.sh reports "running" for silent-stalled daemons; verify log mtime, not just PID
+
+## Active Project: gw2-compliance-agent
+- [gw2-compliance-agent state pointer](gw2-compliance-agent.md) — handles + outstanding tasks; full handoff doc lives at `/home/i/audits/gw2-compliance-agent/SESSION-HANDOFF-2026-05-09.md`
+
+## Security
+- [Incident Recovery INC-20260224-001](incident-recovery-20260224.md) — prompt injection attack, full credential purge, BitNet guard deployment, service restoration
+
+## OpenClaw (v2026.3.7)
+
+4-service stack: BitNet Guard (8080) + genai-toolbox (5051) + Gateway (18789) + Node Host. 6 agents, 8 active cron jobs, Telegram integration.
+
+Detailed reference files:
+- [Architecture](openclaw-architecture.md) — services, agents, providers, channels, directories
+- [Config Reference](openclaw-config-reference.md) — config files, openclaw.json sections, interpolation gotchas
+- [Service Management](openclaw-service-management.md) — control script, startup, cold-start, health checks, node pairing
+- [Cron Reference](openclaw-cron-reference.md) — 8 active jobs, schedules, troubleshooting
+- [Plugins](openclaw-plugins.md) — enabled plugins, BitNet guard, plugin dev rules
+- [Credentials](openclaw-credentials.md) — vault structure, decryption, GNOME keyring, rotation
+- [Kimi Coding OAuth](kimi-coding-oauth.md) — OAuth integration, sync script, token refresh
+- [Troubleshooting](openclaw-troubleshooting.md) — common issues, upgrade procedure, incident response
+
+Operational skill: `~/.claude/skills/openclaw-ops/SKILL.md`
+**Plugin**: `openclaw-ops@local` at `~/.claude/plugins/local/openclaw-ops/`
+  - Commands: `/openclaw-ops:status`, `/openclaw-ops:restart`, `/openclaw-ops:diagnose`, `/openclaw-ops:logs`, `/openclaw-ops:cron`, `/openclaw-ops:help`
+  - Agent: `ops-diagnostician` (Sonnet) — deep multi-service diagnostics
+
+## Gemini-to-IM Bridge
+- [Gemini Telegram Bridge](gemini-to-im.md) — forked from kimi-to-im on 2026-05-04, lives at `~/.gemini/extensions/telegram-bridge/`, uses Gemini CLI OAuth + per-chat cwd for session resume
+
+## Claude-to-IM Bridge
+- **Skill**: `~/.claude/skills/claude-to-im/SKILL.md` (auto-triggered by natural language; subcommands setup/start/stop/status/logs/reconfigure/doctor)
+- **Plugin**: `claude-to-im@local` at `~/.claude/plugins/local/claude-to-im/` (created 2026-05-02) — explicit slash commands `/claude-to-im:setup`, `/claude-to-im:start`, `/claude-to-im:stop`, `/claude-to-im:status`, `/claude-to-im:logs`, `/claude-to-im:reconfigure`, `/claude-to-im:doctor`, `/claude-to-im:help`
+- Pattern: trivial commands (start/stop/status/logs/doctor) call `bash ~/.claude/skills/claude-to-im/scripts/{daemon.sh,doctor.sh}` directly; interactive commands (setup/reconfigure) delegate to the parent skill via the `Skill` tool
+- Config: `~/.claude-to-im/config.env` (mode 600); daemon PID at `~/.claude-to-im/runtime/daemon.pid`; logs at `~/.claude-to-im/logs/`
+
+## Lobster v02
+- Location: `/home/i/lobster-v02/`, version `2026.3.7-v02`
+- **Plugin**: `lobster-v02@local` at `~/.claude/plugins/local/lobster-v02/`
+  - Commands: `/lobster-v02:run`, `/lobster-v02:workflow`, `/lobster-v02:monitor`, `/lobster-v02:resume`, `/lobster-v02:doctor`, `/lobster-v02:help`
+  - Agents: `pipeline-builder` (Sonnet), `workflow-designer` (Sonnet)
+- **Skill alias**: `/lobster` at `~/.claude/commands/lobster.md` (standalone quick-access)
+- Binary: `node /home/i/lobster-v02/bin/lobster.js`
+- 22 commands: exec, where, pick, head, sort, dedupe, groupBy, map, template, json, table, approve, diff.last, state.get, state.set, clawd.invoke, llm_task.invoke, email.triage, gog.gmail.search, gog.gmail.send, commands.list, workflows.list, workflows.run
+- State: `~/.lobster/state/`, tokens HMAC-signed with 24h TTL
+- SDK: `@clawdbot/lobster/sdk` (Lobster class, approve, exec, diffLast, state)
+- Recipes: `github.pr.monitor` / `github.pr.monitor.notify`

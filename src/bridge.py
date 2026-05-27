@@ -132,8 +132,10 @@ async def send_typing(
         await tg_call(client, token, "sendChatAction", {
             "chat_id": chat_id, "action": "typing"
         }, timeout=5.0)
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001
+        # Adaptive Fault Tolerance: typing indicator is best-effort.
+        # Degrade silently-but-logged — never raise into the caller.
+        log.debug("sendChatAction failed for chat %d: %s", chat_id, exc)
 
 # ---------------------------------------------------------------------------
 # Access control
@@ -216,13 +218,15 @@ async def run_deepseek(
             stdout_data = stdout_bytes.decode("utf-8", errors="replace")
             stderr_data = stderr_bytes.decode("utf-8", errors="replace")
             error_msg = f"DeepSeek TUI timed out after {timeout_ms // 1000}s"
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
+        # Top-level handler: surface as error_msg to the caller.
         error_msg = str(exc)
         try:
             proc.kill()
             await proc.communicate()
-        except Exception:
-            pass
+        except (ProcessLookupError, OSError) as cleanup_exc:
+            # Cleanup after kill is best-effort — degrade-but-log.
+            log.debug("Cleanup communicate() failed after kill: %s", cleanup_exc)
 
     if stderr_data.strip():
         log.info("stderr: %s", stderr_data.strip()[:500])
@@ -301,7 +305,8 @@ async def handle_message(
         else:
             await send_message(client, token, chat_id,
                                "⚠️ (no response from DeepSeek)")
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
+        # Top-level per-message boundary — must not escape into poll loop.
         typing_task.cancel()
         log.exception("Error handling message from chat %d", chat_id)
         await send_message(client, token, chat_id, f"⚠️ Bridge error: {exc}")
@@ -437,7 +442,8 @@ async def poll_loop(
         except httpx.HTTPError as exc:
             log.error("HTTP error polling Telegram: %s", exc)
             await asyncio.sleep(5)
-        except Exception as exc:
+        except Exception:  # noqa: BLE001
+            # Top-level poll-loop boundary — log + retry, never exit.
             log.exception("Unexpected error in poll loop")
             await asyncio.sleep(5)
 

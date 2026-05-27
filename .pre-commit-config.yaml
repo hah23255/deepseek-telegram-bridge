@@ -1,0 +1,57 @@
+# Master Tester Doctrine pre-commit gate.
+# Golden Rule 1: fix the code, never the test.
+# Every hook fails loud — no silent pass-through.
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=512"]
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+
+  # PII / secret guard — bridge config carries TELEGRAM_BOT_TOKEN.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+        name: gitleaks (secret scan — Telegram tokens, DeepSeek keys)
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.4
+    hooks:
+      - id: ruff
+        args: ["--fix", "--exit-non-zero-on-fix"]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - "httpx[http2]>=0.27"
+          - "pytest>=8.3"
+        args: ["--strict", "--show-error-codes"]
+        files: ^src/
+
+  # Runs on pre-push only — keeps commit loop fast.
+  - repo: local
+    hooks:
+      - id: pytest-fast
+        name: pytest (unit, fail-fast)
+        entry: pytest -x -q -m "unit and not slow"
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-push]
+
+default_language_version:
+  python: python3.10

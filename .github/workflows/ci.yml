@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Golden Rule 1 enforcement — tests are contracts, never edit them to go green
+  # ---------------------------------------------------------------------------
+  test-file-integrity:
+    name: Test-file integrity (Law 1)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Block PRs that modify tests/ without [allow-test-edit]
+        run: |
+          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep '^tests/' || true)
+          if [ -n "$CHANGED" ]; then
+            TITLE="${{ github.event.pull_request.title }}"
+            BODY="${{ github.event.pull_request.body }}"
+            if echo "$TITLE$BODY" | grep -q '\[allow-test-edit\]'; then
+              echo "Test edits allowed via [allow-test-edit] marker."
+            else
+              echo "ERROR: This PR modifies test files without [allow-test-edit]."
+              echo "Tests are contracts (Doctrine Law 1). Fix the code, not the test."
+              echo "Changed test files:"
+              echo "$CHANGED"
+              exit 1
+            fi
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Secret / PII scan
+  # ---------------------------------------------------------------------------
+  gitleaks:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # Lint + type check
+  # ---------------------------------------------------------------------------
+  lint-and-type:
+    name: Lint + mypy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dev dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: ruff check
+        run: ruff check src/ tests/
+      - name: ruff format check
+        run: ruff format --check src/ tests/
+      - name: mypy
+        run: mypy --strict src/
+
+  # ---------------------------------------------------------------------------
+  # Tests
+  # ---------------------------------------------------------------------------
+  test:
+    name: pytest (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Unit tests
+        run: pytest -m "unit" -v --cov=bridge --cov-report=term-missing
+      - name: Property-based tests
+        run: pytest -m "property" -v
+      - name: Race / concurrency tests
+        run: pytest -m "race" -v
