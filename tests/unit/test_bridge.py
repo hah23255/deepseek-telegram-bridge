@@ -8,10 +8,7 @@ No real time, no real network (Golden Rule 8).
 
 from __future__ import annotations
 
-import json
 import pytest
-
-import httpx
 
 from bridge import (
     _split_text,
@@ -19,7 +16,6 @@ from bridge import (
     is_authorized,
     run_deepseek,
 )
-
 
 # ---------------------------------------------------------------------------
 # _split_text — pure function, no mocks needed
@@ -129,10 +125,10 @@ def test_build_command_agent_mode_inserts_auto() -> None:
 @pytest.mark.unit
 def test_build_command_workspace() -> None:
     from tests.conftest import FakeConfig
-    cfg = FakeConfig(working_dir="/tmp/ws").as_dict()
+    cfg = FakeConfig(working_dir="/workspace/project").as_dict()
     cmd = build_command(cfg, "hello")
     assert "--workspace" in cmd
-    assert "/tmp/ws" in cmd
+    assert "/workspace/project" in cmd
 
 
 @pytest.mark.unit

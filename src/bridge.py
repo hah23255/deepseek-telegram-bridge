@@ -10,6 +10,7 @@ on first message per chat, --continue for subsequent messages in that chat.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -46,12 +47,13 @@ log = logging.getLogger("deepseek-bridge")
 
 def load_config() -> dict[str, Any]:
     if not CONFIG_PATH.exists():
-        print(f"Config not found at {CONFIG_PATH}", file=sys.stderr)
-        print("Copy config.example.json → config.json and fill in your values.",
-              file=sys.stderr)
+        sys.stderr.write(f"Config not found at {CONFIG_PATH}\n")
+        sys.stderr.write(
+            "Copy config.example.json → config.json and fill in your values.\n"
+        )
         sys.exit(1)
-    with open(CONFIG_PATH) as f:
-        cfg = json.load(f)
+    with CONFIG_PATH.open() as f:
+        cfg: dict[str, Any] = json.load(f)
     tg = cfg.get("telegram", {})
     if not tg.get("bot_token"):
         raise ValueError("telegram.bot_token is required")
@@ -60,15 +62,16 @@ def load_config() -> dict[str, Any]:
 
 def load_state() -> dict[str, Any]:
     if STATE_PATH.exists():
-        with open(STATE_PATH) as f:
-            return json.load(f)
+        with STATE_PATH.open() as f:
+            result: dict[str, Any] = json.load(f)
+            return result
     return {"sessions": {}, "offset": 0}
 
 
 def save_state(state: dict[str, Any]) -> None:
     STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     tmp = STATE_PATH.with_suffix(".tmp")
-    with open(tmp, "w") as f:
+    with tmp.open("w") as f:
         json.dump(state, f, indent=2)
     tmp.replace(STATE_PATH)
 
@@ -83,7 +86,7 @@ async def tg_call(
     url = f"{TELEGRAM_API}/bot{token}/{method}"
     resp = await client.post(url, json=params, timeout=timeout)
     resp.raise_for_status()
-    data = resp.json()
+    data: dict[str, Any] = resp.json()
     if not data.get("ok"):
         log.error("Telegram API error (%s): %s", method, data)
     return data
@@ -93,14 +96,14 @@ async def send_message(
     client: httpx.AsyncClient, token: str, chat_id: int, text: str,
     *, reply_to: int | None = None,
 ) -> dict[str, Any]:
-    MAX_LEN = 4000
-    if len(text) <= MAX_LEN:
+    max_len = 4000
+    if len(text) <= max_len:
         return await tg_call(client, token, "sendMessage", {
             "chat_id": chat_id, "text": text,
             "reply_to_message_id": reply_to,
         })
-    parts = _split_text(text, MAX_LEN)
-    last = None
+    parts = _split_text(text, max_len)
+    last: dict[str, Any] = {}
     for part in parts:
         last = await tg_call(client, token, "sendMessage", {
             "chat_id": chat_id, "text": part,
@@ -190,7 +193,7 @@ async def run_deepseek(
 ) -> dict[str, Any]:
     """Spawn deepseek-tui exec --json, return parsed output."""
     cmd = build_command(cfg, prompt, use_continue=use_continue, chat_settings=chat_settings)
-    working_dir = cfg["deepseek"].get("working_dir") or os.getcwd()
+    working_dir = cfg["deepseek"].get("working_dir") or str(Path.cwd())
 
     log.info("Spawning: %s", " ".join(cmd))
 
@@ -305,7 +308,7 @@ async def handle_message(
         else:
             await send_message(client, token, chat_id,
                                "⚠️ (no response from DeepSeek)")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         # Top-level per-message boundary — must not escape into poll loop.
         typing_task.cancel()
         log.exception("Error handling message from chat %d", chat_id)
@@ -328,7 +331,7 @@ async def _typing_loop(
 
 async def handle_command(
     client: httpx.AsyncClient, cfg: dict[str, Any], state: dict[str, Any],
-    chat_id: int, user_id: int, text: str, message_id: int,
+    chat_id: int, _user_id: int, text: str, _message_id: int,
 ) -> None:
     token = cfg["telegram"]["bot_token"]
     chat_key = str(chat_id)
@@ -421,6 +424,8 @@ async def poll_loop(
 ) -> None:
     token = cfg["telegram"]["bot_token"]
     log.info("Bridge started. Polling for updates...")
+    # Strong references prevent per-message tasks from being GC'd mid-flight.
+    _bg_tasks: set[asyncio.Task[None]] = set()
 
     while True:
         try:
@@ -436,13 +441,15 @@ async def poll_loop(
                 save_state(state)
                 msg = update.get("message")
                 if msg:
-                    asyncio.create_task(
+                    task = asyncio.create_task(
                         handle_message(client, cfg, state, msg))
+                    _bg_tasks.add(task)
+                    task.add_done_callback(_bg_tasks.discard)
 
         except httpx.HTTPError as exc:
             log.error("HTTP error polling Telegram: %s", exc)
             await asyncio.sleep(5)
-        except Exception:  # noqa: BLE001
+        except Exception:
             # Top-level poll-loop boundary — log + retry, never exit.
             log.exception("Unexpected error in poll loop")
             await asyncio.sleep(5)
@@ -502,10 +509,8 @@ async def main() -> None:
         loop.add_signal_handler(sig, lambda: asyncio.create_task(_shutdown()))
 
     async with httpx.AsyncClient(http2=True, timeout=httpx.Timeout(60.0)) as client:
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await poll_loop(client, cfg, state)
-        except asyncio.CancelledError:
-            pass
     log.info("Bridge shut down.")
 
 
