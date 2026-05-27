@@ -8,16 +8,15 @@ task leaks survive the handler, and freeze_time to keep timing stable.
 from __future__ import annotations
 
 import asyncio
-import json
 
 import pytest
 
-from bridge import handle_message, _split_text
-
+from bridge import handle_message
 
 # ---------------------------------------------------------------------------
 # Task-leak guard — handle_message must cancel typing_task on all paths
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.race
 @pytest.mark.asyncio
@@ -28,8 +27,9 @@ async def test_handle_message_no_task_leak_on_deepseek_error(
     fake_config: object,
 ) -> None:
     """Cancellation paths in handle_message must not leak asyncio tasks."""
-    import respx
     import httpx
+    import respx
+
     from tests.conftest import FakeChat, FakeConfig, PoisonPillSubprocess
 
     assert isinstance(mock_telegram, respx.MockRouter)
@@ -70,9 +70,7 @@ async def test_handle_message_no_task_leak_on_deepseek_error(
 
     tasks_after = set(asyncio.all_tasks()) - tasks_before
     lingering = [t for t in tasks_after if not t.done()]
-    assert lingering == [], (
-        f"Task leak detected: {[t.get_name() for t in lingering]}"
-    )
+    assert lingering == [], f"Task leak detected: {[t.get_name() for t in lingering]}"
 
 
 @pytest.mark.race
@@ -83,8 +81,9 @@ async def test_concurrent_chats_do_not_share_session_state(
     fake_config: object,
 ) -> None:
     """Two concurrent chats must not read each other's session key."""
-    import respx
     import httpx
+    import respx
+
     from tests.conftest import FakeConfig, PoisonPillSubprocess
 
     assert isinstance(mock_telegram, respx.MockRouter)

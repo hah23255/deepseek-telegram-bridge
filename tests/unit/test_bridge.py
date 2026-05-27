@@ -21,6 +21,7 @@ from bridge import (
 # _split_text — pure function, no mocks needed
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 def test_split_text_short_message_returns_single_part() -> None:
     # Arrange
@@ -82,9 +83,11 @@ def test_split_text_preserves_all_content() -> None:
 # build_command — pure function
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 def test_build_command_defaults(fake_config: object) -> None:
     from tests.conftest import FakeConfig
+
     cfg = FakeConfig().as_dict()
     # Act
     cmd = build_command(cfg, "hello")
@@ -99,6 +102,7 @@ def test_build_command_defaults(fake_config: object) -> None:
 @pytest.mark.unit
 def test_build_command_continue_flag(fake_config: object) -> None:
     from tests.conftest import FakeConfig
+
     cfg = FakeConfig().as_dict()
     cmd = build_command(cfg, "followup", use_continue=True)
     assert "--continue" in cmd
@@ -108,6 +112,7 @@ def test_build_command_continue_flag(fake_config: object) -> None:
 @pytest.mark.unit
 def test_build_command_model_override() -> None:
     from tests.conftest import FakeConfig
+
     cfg = FakeConfig(model="deepseek-v4-pro").as_dict()
     cmd = build_command(cfg, "hello")
     assert "--model" in cmd
@@ -117,6 +122,7 @@ def test_build_command_model_override() -> None:
 @pytest.mark.unit
 def test_build_command_agent_mode_inserts_auto() -> None:
     from tests.conftest import FakeConfig
+
     cfg = FakeConfig().as_dict()
     cmd = build_command(cfg, "hello", chat_settings={"agent": True})
     assert "--auto" in cmd
@@ -125,6 +131,7 @@ def test_build_command_agent_mode_inserts_auto() -> None:
 @pytest.mark.unit
 def test_build_command_workspace() -> None:
     from tests.conftest import FakeConfig
+
     cfg = FakeConfig(working_dir="/workspace/project").as_dict()
     cmd = build_command(cfg, "hello")
     assert "--workspace" in cmd
@@ -134,6 +141,7 @@ def test_build_command_workspace() -> None:
 @pytest.mark.unit
 def test_build_command_per_chat_model_overrides_config() -> None:
     from tests.conftest import FakeConfig
+
     cfg = FakeConfig(model="deepseek-v4-flash").as_dict()
     cmd = build_command(cfg, "hello", chat_settings={"model": "deepseek-v4-pro"})
     idx = cmd.index("--model")
@@ -144,9 +152,11 @@ def test_build_command_per_chat_model_overrides_config() -> None:
 # is_authorized — pure function
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 def test_is_authorized_open_config_allows_anyone() -> None:
     from tests.conftest import FakeConfig
+
     cfg = FakeConfig().as_dict()
     assert is_authorized(cfg, user_id=999, chat_id=888) is True
 
@@ -154,6 +164,7 @@ def test_is_authorized_open_config_allows_anyone() -> None:
 @pytest.mark.unit
 def test_is_authorized_blocks_user_not_in_allowlist() -> None:
     from tests.conftest import FakeConfig
+
     cfg = FakeConfig(allowed_user_ids=(1, 2, 3)).as_dict()
     assert is_authorized(cfg, user_id=999, chat_id=888) is False
 
@@ -161,6 +172,7 @@ def test_is_authorized_blocks_user_not_in_allowlist() -> None:
 @pytest.mark.unit
 def test_is_authorized_allows_user_in_allowlist() -> None:
     from tests.conftest import FakeConfig
+
     cfg = FakeConfig(allowed_user_ids=(1, 2, 999)).as_dict()
     assert is_authorized(cfg, user_id=999, chat_id=888) is True
 
@@ -168,6 +180,7 @@ def test_is_authorized_allows_user_in_allowlist() -> None:
 @pytest.mark.unit
 def test_is_authorized_blocks_chat_not_in_allowlist() -> None:
     from tests.conftest import FakeConfig
+
     cfg = FakeConfig(allowed_chat_ids=(100, 200)).as_dict()
     assert is_authorized(cfg, user_id=999, chat_id=999) is False
 
@@ -175,6 +188,7 @@ def test_is_authorized_blocks_chat_not_in_allowlist() -> None:
 @pytest.mark.unit
 def test_is_authorized_allows_chat_in_allowlist() -> None:
     from tests.conftest import FakeConfig
+
     cfg = FakeConfig(allowed_chat_ids=(100, 200, 888)).as_dict()
     assert is_authorized(cfg, user_id=999, chat_id=888) is True
 
@@ -183,10 +197,12 @@ def test_is_authorized_allows_chat_in_allowlist() -> None:
 # run_deepseek — subprocess boundary via Poison-Pill mock
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_run_deepseek_happy_path(poison_pill_subprocess: object) -> None:
     from tests.conftest import FakeConfig, PoisonPillSubprocess
+
     assert isinstance(poison_pill_subprocess, PoisonPillSubprocess)
     cfg = FakeConfig().as_dict()
     poison_pill_subprocess.register(
@@ -206,6 +222,7 @@ async def test_run_deepseek_empty_output_returns_fallback(
     poison_pill_subprocess: object,
 ) -> None:
     from tests.conftest import FakeConfig, PoisonPillSubprocess
+
     assert isinstance(poison_pill_subprocess, PoisonPillSubprocess)
     cfg = FakeConfig().as_dict()
     poison_pill_subprocess.register(
@@ -222,6 +239,7 @@ async def test_run_deepseek_malformed_json_returns_empty(
     poison_pill_subprocess: object,
 ) -> None:
     from tests.conftest import FakeConfig, PoisonPillSubprocess
+
     assert isinstance(poison_pill_subprocess, PoisonPillSubprocess)
     cfg = FakeConfig().as_dict()
     poison_pill_subprocess.register(
@@ -240,6 +258,7 @@ async def test_run_deepseek_error_field_surfaces_as_error(
     poison_pill_subprocess: object,
 ) -> None:
     from tests.conftest import FakeConfig, PoisonPillSubprocess
+
     assert isinstance(poison_pill_subprocess, PoisonPillSubprocess)
     cfg = FakeConfig().as_dict()
     poison_pill_subprocess.register(
@@ -256,6 +275,7 @@ async def test_run_deepseek_unregistered_binary_raises_poison_pill(
     poison_pill_subprocess: object,
 ) -> None:
     from tests.conftest import FakeConfig, UnmockedSubprocessCallError
+
     cfg = FakeConfig().as_dict()
     # Intentionally do NOT register — verifies the harness catches rogue calls.
     with pytest.raises(UnmockedSubprocessCallError):

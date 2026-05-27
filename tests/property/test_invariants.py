@@ -16,10 +16,10 @@ from hypothesis import strategies as st
 
 from bridge import _split_text, build_command
 
-
 # ---------------------------------------------------------------------------
 # _split_text — alignment invariants
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.property
 @given(
@@ -31,9 +31,7 @@ def test_split_text_no_part_exceeds_max_len(text: str, max_len: int) -> None:
     """Alignment: every part produced is within max_len characters."""
     parts = _split_text(text, max_len)
     for part in parts:
-        assert len(part) <= max_len, (
-            f"Part of length {len(part)} exceeds max_len={max_len}"
-        )
+        assert len(part) <= max_len, f"Part of length {len(part)} exceeds max_len={max_len}"
 
 
 @pytest.mark.property
@@ -56,9 +54,7 @@ def test_split_text_content_is_preserved(text: str, max_len: int) -> None:
 
     original_nonws = nonws(text)
     result_nonws = nonws("".join(parts))
-    assert original_nonws == result_nonws, (
-        "Non-whitespace content lost or reordered after split"
-    )
+    assert original_nonws == result_nonws, "Non-whitespace content lost or reordered after split"
 
 
 @pytest.mark.property
@@ -74,11 +70,13 @@ def test_split_text_short_text_is_single_part(text: str) -> None:
 # build_command — structural alignment invariants
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.property
 @given(prompt=st.text(min_size=1, max_size=2000))
 def test_build_command_prompt_is_last_arg(prompt: str) -> None:
     """Alignment: the prompt must always be the final element of the argv."""
     from tests.conftest import FakeConfig
+
     cfg = FakeConfig().as_dict()
     cmd = build_command(cfg, prompt)
     assert cmd[-1] == prompt
@@ -89,6 +87,7 @@ def test_build_command_prompt_is_last_arg(prompt: str) -> None:
 def test_build_command_exactly_one_session_flag(use_continue: bool) -> None:
     """Alignment: exactly one of --fresh / --continue must appear, never both."""
     from tests.conftest import FakeConfig
+
     cfg = FakeConfig().as_dict()
     cmd = build_command(cfg, "hello", use_continue=use_continue)
     fresh_count = cmd.count("--fresh")
@@ -103,6 +102,7 @@ def test_build_command_exactly_one_session_flag(use_continue: bool) -> None:
 def test_build_command_model_flag_alignment(model: str | None) -> None:
     """Alignment: --model appears iff a model is configured, and its value follows."""
     from tests.conftest import FakeConfig
+
     cfg = FakeConfig(model=model).as_dict()
     cmd = build_command(cfg, "hello")
     if model:

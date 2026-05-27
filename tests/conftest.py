@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 # Poison-Pill subprocess mock  (Golden Rule 6 / Zero-Trust pattern)
 # ---------------------------------------------------------------------------
 
+
 class UnmockedSubprocessCallError(AssertionError):
     """Raised when production code spawns an unregistered subprocess argv.
 
@@ -115,6 +116,7 @@ def poison_pill_subprocess(monkeypatch: pytest.MonkeyPatch) -> PoisonPillSubproc
 # Telegram Bot API mock  (Golden Rule 6: never mock httpx directly)
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def mock_telegram() -> Iterator[respx.MockRouter]:
     """respx-backed strict Telegram mock.  Unmatched routes fail the test."""
@@ -130,6 +132,7 @@ def mock_telegram() -> Iterator[respx.MockRouter]:
 # Deterministic time  (Golden Rule 8)
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def frozen_clock() -> Iterator[None]:
     with freeze_time("2026-05-05T00:00:00Z"):
@@ -139,6 +142,7 @@ def frozen_clock() -> Iterator[None]:
 # ---------------------------------------------------------------------------
 # Test data factories — no real PII, no real tokens
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class FakeChat:
@@ -187,6 +191,7 @@ def fake_config() -> FakeConfig:
 def fake_config_factory() -> Callable[..., FakeConfig]:
     def _factory(**overrides: Any) -> FakeConfig:
         return FakeConfig(**overrides)
+
     return _factory
 
 
@@ -194,9 +199,8 @@ def fake_config_factory() -> Callable[..., FakeConfig]:
 # Marker handling — integration tests are opt-in only
 # ---------------------------------------------------------------------------
 
-def pytest_collection_modifyitems(
-    config: pytest.Config, items: list[pytest.Item]
-) -> None:
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     selected = config.getoption("-m", default="")
     if selected and "integration" in str(selected):
         return
