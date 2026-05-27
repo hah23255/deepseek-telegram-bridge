@@ -10,6 +10,7 @@ on first message per chat, --continue for subsequent messages in that chat.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -24,16 +25,13 @@ import httpx
 # Paths
 # ---------------------------------------------------------------------------
 CONFIG_PATH = Path(
-    os.environ.get("DEEPSEEK_BRIDGE_CONFIG",
-                    Path(__file__).resolve().parent.parent / "config.json")
+    os.environ.get("DEEPSEEK_BRIDGE_CONFIG", Path(__file__).resolve().parent.parent / "config.json")
 )
 STATE_PATH = Path(
-    os.environ.get("DEEPSEEK_BRIDGE_STATE",
-                    Path(__file__).resolve().parent.parent / "state.json")
+    os.environ.get("DEEPSEEK_BRIDGE_STATE", Path(__file__).resolve().parent.parent / "state.json")
 )
 LOG_PATH = Path(
-    os.environ.get("DEEPSEEK_BRIDGE_LOG",
-                    Path(__file__).resolve().parent.parent / "bridge.log")
+    os.environ.get("DEEPSEEK_BRIDGE_LOG", Path(__file__).resolve().parent.parent / "bridge.log")
 )
 TELEGRAM_API = "https://api.telegram.org"
 TYPING_INTERVAL = 4  # seconds
@@ -44,14 +42,14 @@ log = logging.getLogger("deepseek-bridge")
 # Config & State
 # ---------------------------------------------------------------------------
 
+
 def load_config() -> dict[str, Any]:
     if not CONFIG_PATH.exists():
-        print(f"Config not found at {CONFIG_PATH}", file=sys.stderr)
-        print("Copy config.example.json → config.json and fill in your values.",
-              file=sys.stderr)
+        sys.stderr.write(f"Config not found at {CONFIG_PATH}\n")
+        sys.stderr.write("Copy config.example.json → config.json and fill in your values.\n")
         sys.exit(1)
-    with open(CONFIG_PATH) as f:
-        cfg = json.load(f)
+    with CONFIG_PATH.open() as f:
+        cfg: dict[str, Any] = json.load(f)
     tg = cfg.get("telegram", {})
     if not tg.get("bot_token"):
         raise ValueError("telegram.bot_token is required")
@@ -60,51 +58,73 @@ def load_config() -> dict[str, Any]:
 
 def load_state() -> dict[str, Any]:
     if STATE_PATH.exists():
-        with open(STATE_PATH) as f:
-            return json.load(f)
+        with STATE_PATH.open() as f:
+            result: dict[str, Any] = json.load(f)
+            return result
     return {"sessions": {}, "offset": 0}
 
 
 def save_state(state: dict[str, Any]) -> None:
     STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     tmp = STATE_PATH.with_suffix(".tmp")
-    with open(tmp, "w") as f:
+    with tmp.open("w") as f:
         json.dump(state, f, indent=2)
     tmp.replace(STATE_PATH)
+
 
 # ---------------------------------------------------------------------------
 # Telegram helpers
 # ---------------------------------------------------------------------------
 
+
 async def tg_call(
-    client: httpx.AsyncClient, token: str, method: str,
-    params: dict[str, Any] | None = None, timeout: float = 30.0,
+    client: httpx.AsyncClient,
+    token: str,
+    method: str,
+    params: dict[str, Any] | None = None,
+    timeout: float = 30.0,
 ) -> dict[str, Any]:
     url = f"{TELEGRAM_API}/bot{token}/{method}"
     resp = await client.post(url, json=params, timeout=timeout)
     resp.raise_for_status()
-    data = resp.json()
+    data: dict[str, Any] = resp.json()
     if not data.get("ok"):
         log.error("Telegram API error (%s): %s", method, data)
     return data
 
 
 async def send_message(
-    client: httpx.AsyncClient, token: str, chat_id: int, text: str,
-    *, reply_to: int | None = None,
+    client: httpx.AsyncClient,
+    token: str,
+    chat_id: int,
+    text: str,
+    *,
+    reply_to: int | None = None,
 ) -> dict[str, Any]:
-    MAX_LEN = 4000
-    if len(text) <= MAX_LEN:
-        return await tg_call(client, token, "sendMessage", {
-            "chat_id": chat_id, "text": text,
-            "reply_to_message_id": reply_to,
-        })
-    parts = _split_text(text, MAX_LEN)
-    last = None
+    max_len = 4000
+    if len(text) <= max_len:
+        return await tg_call(
+            client,
+            token,
+            "sendMessage",
+            {
+                "chat_id": chat_id,
+                "text": text,
+                "reply_to_message_id": reply_to,
+            },
+        )
+    parts = _split_text(text, max_len)
+    last: dict[str, Any] = {}
     for part in parts:
-        last = await tg_call(client, token, "sendMessage", {
-            "chat_id": chat_id, "text": part,
-        })
+        last = await tg_call(
+            client,
+            token,
+            "sendMessage",
+            {
+                "chat_id": chat_id,
+                "text": part,
+            },
+        )
         await asyncio.sleep(0.3)
     return last
 
@@ -125,19 +145,21 @@ def _split_text(text: str, max_len: int) -> list[str]:
     return parts
 
 
-async def send_typing(
-    client: httpx.AsyncClient, token: str, chat_id: int
-) -> None:
+async def send_typing(client: httpx.AsyncClient, token: str, chat_id: int) -> None:
     try:
-        await tg_call(client, token, "sendChatAction", {
-            "chat_id": chat_id, "action": "typing"
-        }, timeout=5.0)
-    except Exception:
-        pass
+        await tg_call(
+            client, token, "sendChatAction", {"chat_id": chat_id, "action": "typing"}, timeout=5.0
+        )
+    except Exception as exc:  # noqa: BLE001
+        # Adaptive Fault Tolerance: typing indicator is best-effort.
+        # Degrade silently-but-logged — never raise into the caller.
+        log.debug("sendChatAction failed for chat %d: %s", chat_id, exc)
+
 
 # ---------------------------------------------------------------------------
 # Access control
 # ---------------------------------------------------------------------------
+
 
 def is_authorized(cfg: dict[str, Any], user_id: int, chat_id: int) -> bool:
     allowed_users: list[int] = cfg["telegram"].get("allowed_user_ids", [])
@@ -150,12 +172,16 @@ def is_authorized(cfg: dict[str, Any], user_id: int, chat_id: int) -> bool:
         return False
     return True
 
+
 # ---------------------------------------------------------------------------
 # DeepSeek TUI subprocess
 # ---------------------------------------------------------------------------
 
+
 def build_command(
-    cfg: dict[str, Any], prompt: str, *,
+    cfg: dict[str, Any],
+    prompt: str,
+    *,
     use_continue: bool = False,
     chat_settings: dict[str, Any] | None = None,
 ) -> list[str]:
@@ -182,13 +208,16 @@ def build_command(
 
 
 async def run_deepseek(
-    cfg: dict[str, Any], prompt: str, timeout_ms: int,
-    *, use_continue: bool = False,
+    cfg: dict[str, Any],
+    prompt: str,
+    timeout_ms: int,
+    *,
+    use_continue: bool = False,
     chat_settings: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Spawn deepseek-tui exec --json, return parsed output."""
     cmd = build_command(cfg, prompt, use_continue=use_continue, chat_settings=chat_settings)
-    working_dir = cfg["deepseek"].get("working_dir") or os.getcwd()
+    working_dir = cfg["deepseek"].get("working_dir") or str(Path.cwd())
 
     log.info("Spawning: %s", " ".join(cmd))
 
@@ -216,13 +245,15 @@ async def run_deepseek(
             stdout_data = stdout_bytes.decode("utf-8", errors="replace")
             stderr_data = stderr_bytes.decode("utf-8", errors="replace")
             error_msg = f"DeepSeek TUI timed out after {timeout_ms // 1000}s"
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
+        # Top-level handler: surface as error_msg to the caller.
         error_msg = str(exc)
         try:
             proc.kill()
             await proc.communicate()
-        except Exception:
-            pass
+        except (ProcessLookupError, OSError) as cleanup_exc:
+            # Cleanup after kill is best-effort — degrade-but-log.
+            log.debug("Cleanup communicate() failed after kill: %s", cleanup_exc)
 
     if stderr_data.strip():
         log.info("stderr: %s", stderr_data.strip()[:500])
@@ -242,13 +273,17 @@ async def run_deepseek(
         "error": error_msg,
     }
 
+
 # ---------------------------------------------------------------------------
 # Message handler
 # ---------------------------------------------------------------------------
 
+
 async def handle_message(
-    client: httpx.AsyncClient, cfg: dict[str, Any],
-    state: dict[str, Any], msg: dict[str, Any],
+    client: httpx.AsyncClient,
+    cfg: dict[str, Any],
+    state: dict[str, Any],
+    msg: dict[str, Any],
 ) -> None:
     token = cfg["telegram"]["bot_token"]
     chat_id: int = msg["chat"]["id"]
@@ -283,33 +318,32 @@ async def handle_message(
     typing_task = asyncio.create_task(_typing_loop(client, token, chat_id))
     try:
         result = await run_deepseek(
-            cfg, text, timeout_ms,
+            cfg,
+            text,
+            timeout_ms,
             use_continue=has_session,
             chat_settings=chat_settings,
         )
         typing_task.cancel()
 
-        log.info("DeepSeek result: error=%s text_len=%d",
-                 result["error"], len(result.get("text", "")))
+        log.info(
+            "DeepSeek result: error=%s text_len=%d", result["error"], len(result.get("text", ""))
+        )
 
         if result["error"]:
-            await send_message(client, token, chat_id,
-                               f"⚠️ {result['error']}")
+            await send_message(client, token, chat_id, f"⚠️ {result['error']}")
         elif result["text"]:
-            await send_message(client, token, chat_id,
-                               result["text"], reply_to=message_id)
+            await send_message(client, token, chat_id, result["text"], reply_to=message_id)
         else:
-            await send_message(client, token, chat_id,
-                               "⚠️ (no response from DeepSeek)")
+            await send_message(client, token, chat_id, "⚠️ (no response from DeepSeek)")
     except Exception as exc:
+        # Top-level per-message boundary — must not escape into poll loop.
         typing_task.cancel()
         log.exception("Error handling message from chat %d", chat_id)
         await send_message(client, token, chat_id, f"⚠️ Bridge error: {exc}")
 
 
-async def _typing_loop(
-    client: httpx.AsyncClient, token: str, chat_id: int
-) -> None:
+async def _typing_loop(client: httpx.AsyncClient, token: str, chat_id: int) -> None:
     try:
         while True:
             await send_typing(client, token, chat_id)
@@ -317,13 +351,20 @@ async def _typing_loop(
     except asyncio.CancelledError:
         pass
 
+
 # ---------------------------------------------------------------------------
 # Slash commands
 # ---------------------------------------------------------------------------
 
+
 async def handle_command(
-    client: httpx.AsyncClient, cfg: dict[str, Any], state: dict[str, Any],
-    chat_id: int, user_id: int, text: str, message_id: int,
+    client: httpx.AsyncClient,
+    cfg: dict[str, Any],
+    state: dict[str, Any],
+    chat_id: int,
+    _user_id: int,
+    text: str,
+    _message_id: int,
 ) -> None:
     token = cfg["telegram"]["bot_token"]
     chat_key = str(chat_id)
@@ -333,13 +374,20 @@ async def handle_command(
     cmd = cmd.lower()
 
     if cmd == "/start":
-        await send_message(client, token, chat_id,
+        await send_message(
+            client,
+            token,
+            chat_id,
             "DeepSeek TUI Telegram Bridge ready.\n"
             "Send any message to talk to DeepSeek.\n\n"
-            "Commands: /new /status /help")
+            "Commands: /new /status /help",
+        )
 
     elif cmd == "/help":
-        await send_message(client, token, chat_id,
+        await send_message(
+            client,
+            token,
+            chat_id,
             "DeepSeek TUI Telegram Bridge\n\n"
             "/start — Welcome\n"
             "/help — This help\n"
@@ -348,28 +396,29 @@ async def handle_command(
             "/model <name> — Switch model (v4-pro, v4-flash)\n"
             "/reasoning <effort> — Set reasoning (auto, low, medium, high)\n"
             "/agent <on|off> — Toggle agent mode (tools: write/edit/shell)\n\n"
-            "Defaults: flash, auto reasoning, agent OFF.")
+            "Defaults: flash, auto reasoning, agent OFF.",
+        )
 
     elif cmd == "/new":
         sessions.pop(chat_key, None)
         save_state(state)
-        await send_message(client, token, chat_id,
-            "✅ Fresh session. Next message starts clean.")
+        await send_message(client, token, chat_id, "✅ Fresh session. Next message starts clean.")
 
     elif cmd == "/status":
         if chat_key in sessions:
-            await send_message(client, token, chat_id,
-                "📌 Active session in this chat.")
+            await send_message(client, token, chat_id, "📌 Active session in this chat.")
         else:
-            await send_message(client, token, chat_id,
-                "No active session. Next message starts fresh.")
+            await send_message(
+                client, token, chat_id, "No active session. Next message starts fresh."
+            )
 
     elif cmd == "/model":
         arg = (args[0] if args else "").strip().lower()
         valid = ["deepseek-v4-pro", "deepseek-v4-flash"]
         if arg not in valid:
-            await send_message(client, token, chat_id,
-                f"Usage: /model <name>\nValid: {', '.join(valid)}")
+            await send_message(
+                client, token, chat_id, f"Usage: /model <name>\nValid: {', '.join(valid)}"
+            )
             return
         chat_data = state.setdefault("chat_settings", {}).setdefault(chat_key, {})
         chat_data["model"] = arg
@@ -380,8 +429,9 @@ async def handle_command(
         arg = (args[0] if args else "").strip().lower()
         valid = ["auto", "low", "medium", "high"]
         if arg not in valid:
-            await send_message(client, token, chat_id,
-                f"Usage: /reasoning <effort>\nValid: {', '.join(valid)}")
+            await send_message(
+                client, token, chat_id, f"Usage: /reasoning <effort>\nValid: {', '.join(valid)}"
+            )
             return
         chat_data = state.setdefault("chat_settings", {}).setdefault(chat_key, {})
         chat_data["reasoning"] = arg
@@ -394,36 +444,58 @@ async def handle_command(
         if arg == "on":
             chat_data["agent"] = True
             save_state(state)
-            await send_message(client, token, chat_id,
+            await send_message(
+                client,
+                token,
+                chat_id,
                 "🤖 Agent mode ON — tools enabled (write, edit, shell, git).\n"
-                "Responses may be slower. /agent off to disable.")
+                "Responses may be slower. /agent off to disable.",
+            )
         elif arg == "off":
             chat_data.pop("agent", None)
             save_state(state)
-            await send_message(client, token, chat_id,
-                "💬 Agent mode OFF — fast chat only. /agent on to enable tools.")
+            await send_message(
+                client,
+                token,
+                chat_id,
+                "💬 Agent mode OFF — fast chat only. /agent on to enable tools.",
+            )
         else:
             current = "ON" if chat_data.get("agent") else "OFF"
-            await send_message(client, token, chat_id,
-                f"Agent mode: {current}\nUsage: /agent on | /agent off")
+            await send_message(
+                client, token, chat_id, f"Agent mode: {current}\nUsage: /agent on | /agent off"
+            )
+
 
 # ---------------------------------------------------------------------------
 # Poll loop
 # ---------------------------------------------------------------------------
 
+
 async def poll_loop(
-    client: httpx.AsyncClient, cfg: dict[str, Any], state: dict[str, Any],
+    client: httpx.AsyncClient,
+    cfg: dict[str, Any],
+    state: dict[str, Any],
 ) -> None:
     token = cfg["telegram"]["bot_token"]
     log.info("Bridge started. Polling for updates...")
+    # Strong references prevent per-message tasks from being GC'd mid-flight.
+    _bg_tasks: set[asyncio.Task[None]] = set()
 
     while True:
         try:
             offset = state.get("offset", 0)
-            updates = await tg_call(client, token, "getUpdates", {
-                "offset": offset, "timeout": 30,
-                "allowed_updates": ["message"],
-            }, timeout=45.0)
+            updates = await tg_call(
+                client,
+                token,
+                "getUpdates",
+                {
+                    "offset": offset,
+                    "timeout": 30,
+                    "allowed_updates": ["message"],
+                },
+                timeout=45.0,
+            )
 
             for update in updates.get("result", []):
                 update_id = update["update_id"]
@@ -431,26 +503,29 @@ async def poll_loop(
                 save_state(state)
                 msg = update.get("message")
                 if msg:
-                    asyncio.create_task(
-                        handle_message(client, cfg, state, msg))
+                    task = asyncio.create_task(handle_message(client, cfg, state, msg))
+                    _bg_tasks.add(task)
+                    task.add_done_callback(_bg_tasks.discard)
 
         except httpx.HTTPError as exc:
             log.error("HTTP error polling Telegram: %s", exc)
             await asyncio.sleep(5)
-        except Exception as exc:
+        except Exception:
+            # Top-level poll-loop boundary — log + retry, never exit.
             log.exception("Unexpected error in poll loop")
             await asyncio.sleep(5)
+
 
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
+
 def setup_logging() -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[logging.FileHandler(LOG_PATH),
-                  logging.StreamHandler(sys.stderr)],
+        handlers=[logging.FileHandler(LOG_PATH), logging.StreamHandler(sys.stderr)],
     )
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
@@ -464,8 +539,7 @@ async def _shutdown() -> None:
         return
     _shutdown_triggered = True
     log.info("Shutdown signal received.")
-    tasks = [t for t in asyncio.all_tasks()
-             if t is not asyncio.current_task()]
+    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
     for t in tasks:
         t.cancel()
     await asyncio.gather(*tasks, return_exceptions=True)
@@ -480,8 +554,8 @@ async def main() -> None:
     binary = cfg["deepseek"].get("binary", "deepseek-tui")
     try:
         proc = await asyncio.create_subprocess_exec(
-            binary, "--version",
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            binary, "--version", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        )
         stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
         if proc.returncode != 0:
             log.error("%s --version failed (exit %d)", binary, proc.returncode)
@@ -496,10 +570,8 @@ async def main() -> None:
         loop.add_signal_handler(sig, lambda: asyncio.create_task(_shutdown()))
 
     async with httpx.AsyncClient(http2=True, timeout=httpx.Timeout(60.0)) as client:
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await poll_loop(client, cfg, state)
-        except asyncio.CancelledError:
-            pass
     log.info("Bridge shut down.")
 
 

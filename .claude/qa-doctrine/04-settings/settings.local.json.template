@@ -1,0 +1,96 @@
+{
+  "_comment": "QA Doctrine settings template. Merge into ~/.claude/settings.local.json — never replace. Replace <placeholders>.",
+
+  "permissions": {
+    "allow": [
+      "// Substring matches for narrow scope. Prefer over Bash(prefix:*) when commands start with shell var assignments (DATABASE_URL=...; psql ...). The classifier inspects the full command line.",
+
+      "Bash(*<prod-db-host-substring>*)",
+      "Bash(*<prod-blob-domain-substring>*)",
+
+      "// Standard tool patterns:",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git fetch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(gh pr create:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh pr edit:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh run view:*)",
+      "Bash(pnpm install)",
+      "Bash(pnpm test:*)",
+      "Bash(pnpm build:*)",
+      "Bash(pnpm exec:*)",
+      "Bash(npm test)",
+      "Bash(age:*)",
+      "Bash(curl:*)",
+      "Bash(jq:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(wc:*)",
+      "Bash(sort:*)",
+      "Bash(uniq:*)",
+      "Bash(awk:*)",
+      "Bash(sed:*)",
+      "Bash(stat:*)",
+      "Bash(file:*)",
+      "Bash(ssh:*)",
+      "Bash(date:*)",
+      "Bash(cd:*)",
+      "Bash(echo:*)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(cmp:*)",
+      "Bash(tee:*)",
+      "Bash(xargs:*)",
+      "WebSearch",
+      "Read"
+    ],
+    "deny": [
+      "Bash(rm -rf:*)"
+    ]
+  },
+
+  "autoMode": {
+    "allow": [
+      "$defaults",
+
+      "// Factual scope statements only — NO narrative ('user authorized via X'). Classifier rejects fabricated authorization claims.",
+
+      "Read-only psql queries against host <prod-db-host> are in scope. Decryption of <vault-path> to obtain the connection string is in scope. SELECT statements only, with named exceptions wrapped in BEGIN/COMMIT with idempotency guards (AND deleted_at IS NULL): single-row UPDATE on documents.id = '<specific-id>' for F-XYZ remediation; phase-N cleanup soft-delete UPDATEs scoped to user_id LIKE '<pattern>'.",
+
+      "Read-only curl HEAD/GET against *.<prod-blob-domain> is in scope. These URLs are publicly accessible blob storage."
+    ]
+  },
+
+  "advisorModel": "claude-opus-4-7",
+
+  "outputStyle": "default",
+  "alwaysThinkingEnabled": true,
+  "fileCheckpointingEnabled": true,
+  "autoMemoryEnabled": true,
+  "showThinkingSummaries": true,
+  "skipAutoPermissionPrompt": true,
+
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+    "pr-review-toolkit@claude-plugins-official": true,
+    "feature-dev@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true,
+    "claude-code-setup@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true
+  },
+
+  "enabledMcpjsonServers": [],
+  "disabledMcpjsonServers": []
+}

@@ -1,0 +1,139 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deepseek-telegram-bridge"
+version = "1.0.0"
+description = "Telegram ↔ DeepSeek TUI session bridge"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "hah23255" }]
+dependencies = [
+    "httpx[http2]>=0.27",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=5.0",
+    "pytest-mock>=3.14",
+    "pytest-randomly>=3.15",
+    "pytest-xdist>=3.6",
+    "respx>=0.21",
+    "hypothesis>=6.115",
+    "freezegun>=1.5",
+    "ruff>=0.7",
+    "mypy>=1.13",
+    "vulture>=2.13",
+    "pre-commit>=4.0",
+]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# ---------------------------------------------------------------------------
+# Pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["src"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-ra",
+    "--showlocals",
+    "--tb=short",
+    "--import-mode=importlib",
+]
+markers = [
+    "unit: pure-Python unit tests (no network, no subprocess, no real time)",
+    "integration: requires real Telegram + DeepSeek (skipped by default)",
+    "property: hypothesis property-based tests",
+    "race: asyncio concurrency tests",
+    "slow: tests >1s",
+    "quarantine: known-flaky, tracked by issue",
+]
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning:hypothesis.*",
+]
+
+# ---------------------------------------------------------------------------
+# Coverage
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+branch = true
+source = ["bridge"]
+omit = ["tests/*", "*/conftest.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
+fail_under = 30
+show_missing = true
+
+# ---------------------------------------------------------------------------
+# Ruff
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E", "W", "F", "I", "N", "B", "BLE", "C4", "SIM",
+    "ANN", "S", "T20", "PTH", "RET", "ARG", "UP", "RUF",
+]
+ignore = [
+    "ANN401",  # Any acceptable in JSON-shape config/state dicts
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101", "ANN", "ARG", "PTH"]
+"src/bridge.py" = ["S603", "S607"]  # subprocess PATH lookup is intentional
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ---------------------------------------------------------------------------
+# Mypy
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unreachable = true
+disallow_any_unimported = true
+disallow_any_explicit = false  # cfg/state use dict[str, Any] legitimately
+no_implicit_reexport = true
+show_error_codes = true
+pretty = true
+files = ["src/bridge.py"]
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+disallow_any_explicit = false
+
+# ---------------------------------------------------------------------------
+# Vulture
+# ---------------------------------------------------------------------------
+[tool.vulture]
+min_confidence = 80
+paths = ["src"]
+exclude = ["tests/"]
