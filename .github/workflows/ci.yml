@@ -18,12 +18,13 @@ jobs:
         with:
           fetch-depth: 0
       - name: Block PRs that modify tests/ without [allow-test-edit]
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep '^tests/' || true)
           if [ -n "$CHANGED" ]; then
-            TITLE="${{ github.event.pull_request.title }}"
-            BODY="${{ github.event.pull_request.body }}"
-            if echo "$TITLE$BODY" | grep -q '\[allow-test-edit\]'; then
+            if echo "$PR_TITLE$PR_BODY" | grep -q '\[allow-test-edit\]'; then
               echo "Test edits allowed via [allow-test-edit] marker."
             else
               echo "ERROR: This PR modifies test files without [allow-test-edit]."
